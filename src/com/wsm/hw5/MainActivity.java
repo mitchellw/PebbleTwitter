@@ -1,10 +1,15 @@
 package com.wsm.hw5;
 
-import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
 import twitter4j.Query;
+import twitter4j.QueryResult;
+import twitter4j.Twitter;
+import twitter4j.TwitterException;
+import twitter4j.TwitterFactory;
+import twitter4j.conf.ConfigurationBuilder;
 
 import com.getpebble.android.kit.PebbleKit;
 import com.getpebble.android.kit.PebbleKit.PebbleAckReceiver;
@@ -15,20 +20,12 @@ import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.graphics.SurfaceTexture;
-import android.hardware.Camera;
-import android.hardware.Camera.PictureCallback;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.Editable;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
-import android.view.MotionEvent;
-import android.view.TextureView;
-import android.view.TextureView.SurfaceTextureListener;
-import android.view.View;
-import android.view.View.OnTouchListener;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.EditText;
 import android.widget.RelativeLayout;
@@ -67,6 +64,7 @@ public class MainActivity extends Activity {
 	private EditText mSearchEditText;
 
 	private List<ITweet> tweetList;
+	private Twitter twitter;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -82,6 +80,12 @@ public class MainActivity extends Activity {
 				RelativeLayout.LayoutParams.WRAP_CONTENT);
 		params.addRule(RelativeLayout.CENTER_IN_PARENT);
 		mSearchEditText.setLayoutParams(params);
+
+		ConfigurationBuilder cb = new ConfigurationBuilder();
+		TwitterFactory tf = new TwitterFactory(cb.build());
+		twitter = tf.getInstance();
+
+		tweetList = new ArrayList<ITweet>();
 
 		setupPebbleCommunication();
 
@@ -192,7 +196,7 @@ public class MainActivity extends Activity {
 				switch (myTransactionId) {
 
 				case TWEET_REQUEST:
-					sendTweetsToPebble();
+					new TwitterTask().execute(getSearchText());
 					break;
 
 				default:
@@ -217,87 +221,60 @@ public class MainActivity extends Activity {
 	}
 
 	private void sendTweetsToPebble() {
-		//Add all items from the list to a PebbleDictionary
 		PebbleDictionary tweetListDict = new PebbleDictionary();
-		byte[] bytes;
-		int j;
 
 		//Store list size in a PebbleDictionary
 		tweetListDict.addUint32(LIST_SIZE_KEY, tweetList.size());
 		//Add all items from the list to a PebbleDictionary
 		for (int i = 0; i < tweetList.size(); i++) {
-			//Store each item
-			bytes = new byte[groceryList.get(i).getBytes().length + 1];
-			byte[] tempBytes = groceryList.get(i).getBytes();
-			for (j = 0; j < bytes.length - 1; j++) {
-
-				bytes[j] = tempBytes[j];
-			}
-			//Store the status of each item's checkbox
-			bytes[j] = (checkBox.isChecked()) ? (byte) (1 & 0xFF) : (byte) (0 & 0xFF);
-
-			groceryListDict.addBytes(i, bytes);
+			ITweet tweet = tweetList.get(i);
+			String tweetString = tweet.getUser() + "|" + tweet.getText();
+			byte[] bytes = tweetString.getBytes();
+			tweetListDict.addBytes(i, bytes);
 		}
 
 		//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
-		PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, groceryListDict, GROCERY_LIST_SEND);
-		Log.i(TAG, "Grocery list to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
+		PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
+		Log.i(TAG, "Tweet list to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
 	}
 
-	private class TwitterTask extends AsyncTask<String, Void, List<ITweet>> {
+	private class TwitterTask extends AsyncTask<String, Void, Void> {
 
 		@Override
-		protected List<ITweet> doInBackground(String... args) {
+		protected Void doInBackground(String... args) {
 			if (args.length != 1) {
 				return null;
 			}
 			String searchTerm = args[0];
-
 			Query query = new Query(searchTerm);
+			QueryResult result = null;
 
-			List<IPhotoStreamItem> photoStream = new ArrayList<IPhotoStreamItem>();
 			try {
-				lastResult = twitter.search(query);
+				result = twitter.search(query);
 			}
 			catch (TwitterException e) {
 				Log.d(TAG, "Problem searching for tweets.");
-				return photoStream;
+				return null;
 			}
 
-			if (lastResult != null) {
-				List<twitter4j.Status> statuses = lastResult.getTweets();
+			if (result != null) {
+				List<twitter4j.Status> statuses = result.getTweets();
 				if (statuses != null) {
+					tweetList.clear();
 					for (twitter4j.Status status : statuses) {
-						photoStream.add(new TwitterPhotoStreamItem(status));
+						tweetList.add(new Tweet(status));
 					}
 				}
 			}
 
-			return photoStream;
+			return null;
 		}
 
 		@Override
-		protected void onPostExecute(List<IPhotoStreamItem> photoStream) {
-			super.onPostExecute(photoStream);
+		protected void onPostExecute(Void result) {
+			super.onPostExecute(result);
 
-			if (photoStream != null) {
-				adapter.addAll(photoStream);
-				adapter.notifyDataSetChanged();
-
-				Date date = new Date(System.currentTimeMillis());
-
-				String message = "Last updated at " + DateFormat.getDateTimeInstance().format(date);
-				listView.onRefreshComplete(message);
-				listView.onScrollToBottomComplete(message);
-
-				listView.setOnScrollToBottomListener(new OnScrollToBottomListener() {
-
-					@Override
-					public void onScrollToBottom() {
-						new TwitterTask().execute();
-					}
-				});
-			}
+			sendTweetsToPebble();
 		}
 	}
 }
