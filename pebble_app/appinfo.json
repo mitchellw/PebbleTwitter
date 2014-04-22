@@ -1,0 +1,17 @@
+{
+  "uuid": "8e8a4feb-2704-4b72-872b-9cd51dc33d0b",
+  "shortName": "hw5",
+  "longName": "hw5",
+  "companyName": "MakeAwesomeHappen",
+  "versionCode": 1,
+  "versionLabel": "1.0.0",
+  "watchapp": {
+    "watchface": false
+  },
+  "appKeys": {
+    "dummy": 0
+  },
+  "resources": {
+    "media": []
+  }
+}
