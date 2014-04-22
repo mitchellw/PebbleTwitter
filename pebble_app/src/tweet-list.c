@@ -21,9 +21,6 @@ static const char *FILENAME = "tweet-list.c";
 //The PebbleDictionary key value used to retrieve the identifying transactionId field.
 static const int TRANSACTION_ID_KEY = 79;
 
-//The number of rows to display on the Pebble screen
-static const int NUM_DISPLAY_ROWS = 5;
-
 //Enum to store the ids that identify the contents of a dictionary
 enum TransactionId {
     TWEET_REQUEST_ID = 94,
@@ -33,18 +30,20 @@ enum TransactionId {
 //Enum to store all of the keys used for storing various values in the dictionaries
 enum FieldKeys {
 
-    LIST_SIZE_KEY = 37,
+    TWEET_KEY = 37,
 };
 
 //~UI VARIABLES=================================================================================================================================
 //The Window that is the basis for this app
 static Window *window;
 
-//MenuLayer that displays the tweet list on the pebble
-static MenuLayer *menu_layer;
 
 //Singly Linked List of tweet_list_items
 static TweetItem *tweet_list = NULL;
+
+static ScrollLayer *scroll_layer;
+static TextLayer *tweet_layer;
+static TextLayer *author_layer;
 
 static char *translate_error(AppMessageResult result) {
   switch (result) {
@@ -65,12 +64,6 @@ static char *translate_error(AppMessageResult result) {
     default: return "UNKNOWN ERROR";
   }
 }
-
-//Bitmap for the unchecked box
-//static GBitmap *unchecked_bitmap;
-
-//Bitmap for the checked box
-//static GBitmap *checked_bitmap;
 
 //~LIST HELPER FUNCTIONS=======================================================================================================================
 //Adds the passed item to the passed index
@@ -193,57 +186,58 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
 
     // incoming message received
     //Get the size of the list that was sent
-    Tuple *temp_tuple = dict_find(received, LIST_SIZE_KEY);
+    Tuple *temp_tuple = dict_find(received, TWEET_KEY);
 
     if (temp_tuple) {
         //Destroy the previous list
-        list_destroy();
+        //list_destroy();
         
-        uint8_t i, j;
+        uint8_t j;
         //Get list size from temp_tuple
-        uint32_t tweet_list_size = temp_tuple->value->uint8;
         TweetItem *item;
-        app_log(4, FILENAME, 161, "Got the list size == %d\n", (int)tweet_list_size);
-        for (i = 0; i < tweet_list_size; i++) {
-            app_log(4, FILENAME, 333, "start looping...and murdering my watch...\n");
-            //Get tuple for each entry and unpack byte array
-            //Allocate memory for new TweetItems
-            temp_tuple = dict_find(received, i);
-            item = malloc(sizeof(TweetItem));
-            item->tweet = malloc(temp_tuple->length);
-            item->author = malloc(temp_tuple->length);
-            bool author = true;
-            int author_length = 0;
-        
-            for (j = 0; j < temp_tuple->length - 1; j++) {
-        
-                if(temp_tuple->value->data[j] == '|')
-                {
-                    author = false;
-                    author_length = j;
-                }
-                else if(author == false)
-                {
-                    item->tweet[j-author_length-1] = temp_tuple->value->data[j];
-                }
-                else
-                {
-                    item->author[j] = temp_tuple->value->data[j];
-                }
+        app_log(4, FILENAME, 161, "Got data\n");
+        //Get tuple for each entry and unpack byte array
+        //Allocate memory for new TweetItems
+        item = malloc(sizeof(TweetItem));
+        item->tweet = malloc(temp_tuple->length);
+        item->author = malloc(temp_tuple->length);
+        bool author = true;
+        int author_length = 0;
+    
+        for (j = 0; j < temp_tuple->length - 1; j++) {
+    
+            if(temp_tuple->value->data[j] == '|')
+            {
+                author = false;
+                author_length = j;
             }
-            
-            author = false;
-            item->tweet[j-author_length-1] = '\0';
-            item->author[author_length]='\0';
-            //item->is_checked = temp_tuple->value->data[(temp_tuple->length - 1)];
-            app_log(4, FILENAME, 333, "add item looping....\n");
-            list_add_item(item);
-            app_log(4, FILENAME, 333, "en dlooping...and murdering my watch...\n");
-        }
+            else if(author == false)
+            {
+                item->tweet[j-author_length-1] = temp_tuple->value->data[j];
+            }
+            else
+            {
+                item->author[j] = temp_tuple->value->data[j];
+            }
+        
+        author = false;
+        item->tweet[j-author_length-1] = '\0';
+        item->author[author_length]='\0';
+        
+        text_layer_set_text(tweet_layer, item->tweet);
+        text_layer_set_text(author_layer, item->author);
+        
+        GRect bounds = layer_get_frame(window_layer);
+        GSize max_size = text_layer_get_content_size(tweet_layer);
+        text_layer_set_size(tweet_layer, max_size);
+        scroll_layer_set_content_size(scroll_layer, GSize(bounds.size.w, max_size.h + vert_scroll_text_padding));
+
+        //item->is_checked = temp_tuple->value->data[(temp_tuple->length - 1)];
+        //list_add_item(item);
         
         //Reload data and re-draw!
         app_log(4, FILENAME, 326, "CALLING REDRAW THING!\n");
-        menu_layer_reload_data(menu_layer);
+        //menu_layer_reload_data(menu_layer);
         return;
     }
 }
@@ -264,65 +258,32 @@ static void in_dropped_handler(AppMessageResult reason, void *context) {
     //Do nothing here
 }
 
-//~MENU LAYER CALLBACKS=========================================================================================================================
-static void menu_draw_row_callback(GContext *context, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context) {
-    //Get item this row corresponds to
-    TweetItem *item = list_get_item(cell_index->row);
-
-    if (item != NULL) {
-        //Draw the icon and the text
-        menu_cell_basic_draw(context, cell_layer, item->tweet, item->author, NULL);
-    }
-    else {
-        app_log(4, FILENAME, 198, "The index fetched a NULL tweet item...oops\n");
-        menu_cell_title_draw(context, cell_layer, "---ERROR---");
-    }
-}
-
-//Callback returning the height of a cell
-//Display 5 rows on the pebble at once, set size according to this
-static int16_t menu_get_cell_height_callback(MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context) {
-
-    GRect total_bounds = layer_get_bounds(menu_layer_get_layer(menu_layer));
-    return total_bounds.size.h / NUM_DISPLAY_ROWS;
-}
-
-//Callback returning the number of rows per section, based on the section
-//the number of items for the first 1, 0 for all others
-static uint16_t menu_get_number_of_rows(MenuLayer *menu_layer, uint16_t section_index, void *callback_context) {
-
-    //based on stuff
-    return section_index == 0 ? list_size() : 0;
-}
-
-//Callback returning the number of sections in the menu_layer
-//Only have 1 section
-
-static uint16_t menu_get_number_of_sections(MenuLayer *menu_layer, void *callback_context) {
-
-    return 1;
-}
-
-//Callback for the select button clicked
-/*
-static void menu_select_tweet_item(MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context) {
-    //Send check event
-    send_check_message(cell_index->row);
-    //
-    //Mark element as checked in list
-    TweetItem *item = list_get_item(cell_index->row);
-    item->is_checked = (item->is_checked) ? false : true;
-
-    //Redraw menu_layer stuff
-    menu_layer_reload_data(menu_layer);
-}
-*/
 //~UI SETUP FUNCTIONS=========================================================================================================================
 //Setup the layers in the Window
 static void window_load(Window *window) {
     Layer* window_layer = window_get_root_layer(window);
     GRect bounds = layer_get_bounds(window_layer);
-    menu_layer = menu_layer_create(bounds);
+    GRect max_text_bounds = GRect(0, 0, bounds.size.w, 2000);
+
+      // Initialize the scroll layer
+      scroll_layer = scroll_layer_create(bounds);
+
+      // This binds the scroll layer to the window so that up and down map to scrolling
+      // You may use scroll_layer_set_callbacks to add or override interactivity
+      scroll_layer_set_click_config_onto_window(scroll_layer, window);
+
+      // Initialize the text layers
+      tweet_layer = text_layer_create(max_text_bounds);
+      author_layer = text_layer_create(max_text_bounds);
+      text_layer_set_font(tweet_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
+      text_layer_set_font(author_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+      
+      scroll_layer_add_child(scroll_layer, text_layer_get_layer(tweet_layer));
+      scroll_layer_add_child(scroll_layer, text_layer_get_layer(author_layer));
+      
+      layer_add_child(window_layer, scroll_layer_get_layer(scroll_layer));
+      
+    /*menu_layer = menu_layer_create(bounds);
     menu_layer_set_callbacks(menu_layer, NULL, (MenuLayerCallbacks) {
         .draw_header = NULL,
         .draw_row = menu_draw_row_callback,
@@ -336,13 +297,14 @@ static void window_load(Window *window) {
         });
 
     menu_layer_set_click_config_onto_window(menu_layer, window);
-    layer_add_child(window_layer, menu_layer_get_layer(menu_layer));
+    layer_add_child(window_layer, menu_layer_get_layer(menu_layer));*/
 }
 
 //Destroy everything in the Window
 static void window_unload(Window *window) {
-
-    menu_layer_destroy(menu_layer);
+    text_layer_destroy(tweet_layer);
+    text_layer_destroy(author_layer);
+    scroll_layer_destroy(scroll_layer);
 }
 
 //Initialize the window
