@@ -80,6 +80,7 @@ public class MainActivity extends Activity {
 				RelativeLayout.LayoutParams.WRAP_CONTENT);
 		params.addRule(RelativeLayout.CENTER_IN_PARENT);
 		mSearchEditText.setLayoutParams(params);
+		mLayout.addView(mSearchEditText);
 
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 		TwitterFactory tf = new TwitterFactory(cb.build());

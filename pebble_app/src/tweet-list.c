@@ -193,7 +193,7 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
             item->tweet = malloc(temp_tuple->length);
             item->author = malloc(temp_tuple->length);
             bool author = true;
-            int author_length;
+            int author_length = 0;
         
             for (j = 0; j < temp_tuple->length - 1; j++) {
         
@@ -215,8 +215,6 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
             author = false;
             item->tweet[j-author_length-1] = '\0';
             item->author[author_length]='\0';
-            item->tweet = realloc(item->tweet, j-author_length);
-            item->author = realloc(item->author, author_length+1);
             //item->is_checked = temp_tuple->value->data[(temp_tuple->length - 1)];
             app_log(4, FILENAME, 333, "add item looping....\n");
             list_add_item(item);
@@ -352,7 +350,7 @@ static void init(void) {
     app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
     //Request the tweet list
-    //send_request_message();
+    send_request_message();
 
     // Push the window
     window_stack_push(window, true);
@@ -362,8 +360,8 @@ static void init(void) {
 static void deinit(void) {
     
     //Destroy anything using dynamic memory
-
     list_destroy();
+    window_destroy(window);
 }
 
 int main(void) {
