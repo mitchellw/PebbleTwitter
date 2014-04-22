@@ -34,3 +34,5 @@ proguard/
 
 project.properties
 lint.xml
+
+.lock-waf_darwin_build
