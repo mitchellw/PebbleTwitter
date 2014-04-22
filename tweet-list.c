@@ -1,18 +1,20 @@
 #include <pebble.h>
+#include <stdbool.h>
 
 //~STRUCT DEFINITIONS============================================================================================================================
-typedef struct grocery_list_item_t {
+typedef struct tweet_item_t {
 
-    //Boolean value indicating if the checkbox should be checked or unchecked
-    bool is_checked;
     //String that states the item name.
-    char *item_name;
+    char *tweet;
+    //String that states the twitter account
+    char *author;
     //Pointer to next element, NULL if no more elements
-    struct grocery_list_item_t *next_item;
-} GroceryListItem;
+    struct tweet_item_t *next_item;
+    
+} TweetItem;
 
 //~CONSTANTS====================================================================================================================================
-static const char *FILENAME = "grocery-list.c";
+static const char *FILENAME = "tweet-list.c";
 
 //static const char
 
@@ -24,43 +26,40 @@ static const int NUM_DISPLAY_ROWS = 5;
 
 //Enum to store the ids that identify the contents of a dictionary
 enum TransactionId {
-    GROCERY_LIST_REQUEST_ID = 94,
-    GROCERY_LIST_SEND_ID = 95,
-    GROCERY_LIST_CHECK_RECEIVE_ID = 97,
-    GROCERY_LIST_CHECK_SEND_ID = 96,
+    TWEET_REQUEST_ID = 94,
+    TWEET_SEND_ID = 95,
 };
 
 //Enum to store all of the keys used for storing various values in the dictionaries
 enum FieldKeys {
 
     LIST_SIZE_KEY = 37,
-    CHECK_KEY = 38
 };
 
 //~UI VARIABLES=================================================================================================================================
 //The Window that is the basis for this app
 static Window *window;
 
-//MenuLayer that displays the grocery list on the pebble
+//MenuLayer that displays the tweet list on the pebble
 static MenuLayer *menu_layer;
 
-//Singly Linked List of grocery_list_items
-static GroceryListItem *grocery_list = NULL;
+//Singly Linked List of tweet_list_items
+static TweetItem *tweet_list = NULL;
 
 //Bitmap for the unchecked box
-static GBitmap *unchecked_bitmap;
+//static GBitmap *unchecked_bitmap;
 
 //Bitmap for the checked box
-static GBitmap *checked_bitmap;
+//static GBitmap *checked_bitmap;
 
 //~LIST HELPER FUNCTIONS=======================================================================================================================
 //Adds the passed item to the passed index
 //If index == -1, the item is added to the end of the list
-static void list_add_item(GroceryListItem *item) {
+static void list_add_item(TweetItem *item) {
 
-    GroceryListItem *it = grocery_list;
+    TweetItem *it = tweet_list;
 
-    if (grocery_list) {
+    if (tweet_list) {
    
         while (it->next_item != NULL) {
 
@@ -72,15 +71,15 @@ static void list_add_item(GroceryListItem *item) {
     }
     else {
 
-        grocery_list = item;
+        tweet_list = item;
     }
 }
 
-//Gets the item at index position in the grocery list
+//Gets the item at index position in the tweet list
 //If the index is invalid, NULL is returned
-static GroceryListItem* list_get_item(uint8_t index) {
+static TweetItem* list_get_item(uint8_t index) {
 
-    GroceryListItem *it = grocery_list;
+    TweetItem *it = tweet_list;
     uint8_t count = 0;
     while(it != NULL && count != index) {
 
@@ -91,10 +90,10 @@ static GroceryListItem* list_get_item(uint8_t index) {
     return it;
 }
 
-//Gets the size of the GroceryListItem list
+//Gets the size of the TweetItem list
 static uint8_t list_size() {
 
-    GroceryListItem *it = grocery_list;
+    TweetItem *it = tweet_list;
     uint8_t size = 0;
     while (it != NULL) {
 
@@ -107,11 +106,11 @@ static uint8_t list_size() {
 
 static void list_print() {
 
-    GroceryListItem *it = grocery_list;
+    TweetItem *it = tweet_list;
     uint8_t count = 0;
     while (it != NULL) {
 
-        app_log(4, FILENAME, 129, "item %d: it->item_name = %s\n", count, it->item_name);
+        app_log(4, FILENAME, 129, "item %d: it->tweet = %s\n", count, it->tweet);
         count++;
         it = it->next_item;
     }
@@ -119,28 +118,28 @@ static void list_print() {
 
 static void list_destroy() {
 
-    GroceryListItem *it = grocery_list;
-    GroceryListItem *it_buff;
+    TweetItem *it = tweet_list;
+    TweetItem *it_buff;
     while (it != NULL) {
 
         it_buff = it;
         it = it->next_item;
 
-        free(it_buff->item_name);
+        free(it_buff->tweet);
         free(it_buff);
         it_buff = NULL;
     }
 }
 
-//Request Grocery List from phone
+//Request Tweet List from phone
 static void send_request_message() {
 
-    app_log(4, FILENAME, 161, "Requesting Grocery List from phone....\n");
+    app_log(4, FILENAME, 161, "Requesting Tweet List from phone....\n");
 
     DictionaryIterator *iter;
     app_message_outbox_begin(&iter);
 
-    Tuplet value = TupletInteger(TRANSACTION_ID_KEY, GROCERY_LIST_REQUEST_ID);
+    Tuplet value = TupletInteger(TRANSACTION_ID_KEY, TWEET_REQUEST_ID);
     dict_write_tuplet(iter, &value);
 
     app_message_outbox_send();    
@@ -148,6 +147,7 @@ static void send_request_message() {
 
 //Send a check event on a specified index
 //to the phone
+/*
 static void send_check_message(int index) {
     //Setup a dictionary iterator to go through the messages
     DictionaryIterator *iter;
@@ -164,6 +164,7 @@ static void send_check_message(int index) {
     //Send the messages in the outbox
     app_message_outbox_send();
 }
+*/
 
 //~APP MESSAGE CALLBACKS========================================================================================================================
 //Handles Receipt of a message
@@ -180,23 +181,43 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
         
         uint8_t i, j;
         //Get list size from temp_tuple
-        uint32_t grocery_list_size = temp_tuple->value->uint8;
-        GroceryListItem *item;
-        app_log(4, FILENAME, 161, "Got the list size == %d\n", (int)grocery_list_size);
-        for (i = 0; i < grocery_list_size; i++) {
+        uint32_t tweet_list_size = temp_tuple->value->uint8;
+        TweetItem *item;
+        app_log(4, FILENAME, 161, "Got the list size == %d\n", (int)tweet_list_size);
+        for (i = 0; i < tweet_list_size; i++) {
             app_log(4, FILENAME, 333, "start looping...and murdering my watch...\n");
             //Get tuple for each entry and unpack byte array
-            //Allocate memoery for new GroceryListItems
+            //Allocate memory for new TweetItems
             temp_tuple = dict_find(received, i);
-            item = malloc(sizeof(GroceryListItem));
-            item->item_name = malloc(temp_tuple->length);
+            item = malloc(sizeof(TweetItem));
+            item->tweet = malloc(temp_tuple->length);
+            item->author = malloc(temp_tuple->length);
+            bool author = true;
+            int author_length;
         
             for (j = 0; j < temp_tuple->length - 1; j++) {
         
-                item->item_name[j] = temp_tuple->value->data[j];
+                if(temp_tuple->value->data[j] == '|')
+                {
+                    author = false;
+                    author_length = j;
+                }
+                else if(author == false)
+                {
+                    item->tweet[j-author_length-1] = temp_tuple->value->data[j];
+                }
+                else
+                {
+                    item->author[j] = temp_tuple->value->data[j];
+                }
             }
-            item->item_name[j] = '\0';
-            item->is_checked = temp_tuple->value->data[(temp_tuple->length - 1)];
+            
+            author = false;
+            item->tweet[j-author_length-1] = '\0';
+            item->author[author_length]='\0';
+            item->tweet = realloc(item->tweet, j-author_length);
+            item->author = realloc(item->author, author_length+1);
+            //item->is_checked = temp_tuple->value->data[(temp_tuple->length - 1)];
             app_log(4, FILENAME, 333, "add item looping....\n");
             list_add_item(item);
             app_log(4, FILENAME, 333, "en dlooping...and murdering my watch...\n");
@@ -227,16 +248,14 @@ static void in_dropped_handler(AppMessageResult reason, void *context) {
 //~MENU LAYER CALLBACKS=========================================================================================================================
 static void menu_draw_row_callback(GContext *context, const Layer *cell_layer, MenuIndex *cell_index, void *callback_context) {
     //Get item this row corresponds to
-    GroceryListItem *item = list_get_item(cell_index->row);
+    TweetItem *item = list_get_item(cell_index->row);
 
     if (item != NULL) {
-        //Determine which bitmap to draw
-        GBitmap *icon = (item->is_checked) ? checked_bitmap : unchecked_bitmap;
         //Draw the icon and the text
-        menu_cell_basic_draw(context, cell_layer, item->item_name, NULL, icon);
+        menu_cell_basic_draw(context, cell_layer, item->tweet, item->author, NULL);
     }
     else {
-        app_log(4, FILENAME, 198, "The index fetched a NUll grocery item...oops\n");
+        app_log(4, FILENAME, 198, "The index fetched a NULL tweet item...oops\n");
         menu_cell_title_draw(context, cell_layer, "---ERROR---");
     }
 }
@@ -259,24 +278,26 @@ static uint16_t menu_get_number_of_rows(MenuLayer *menu_layer, uint16_t section_
 
 //Callback returning the number of sections in the menu_layer
 //Only have 1 section
+
 static uint16_t menu_get_number_of_sections(MenuLayer *menu_layer, void *callback_context) {
 
     return 1;
 }
 
 //Callback for the select button clicked
-static void menu_select_grocery_item(MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context) {
+/*
+static void menu_select_tweet_item(MenuLayer *menu_layer, MenuIndex *cell_index, void *callback_context) {
     //Send check event
     send_check_message(cell_index->row);
     //
     //Mark element as checked in list
-    GroceryListItem *item = list_get_item(cell_index->row);
+    TweetItem *item = list_get_item(cell_index->row);
     item->is_checked = (item->is_checked) ? false : true;
 
     //Redraw menu_layer stuff
     menu_layer_reload_data(menu_layer);
 }
-
+*/
 //~UI SETUP FUNCTIONS=========================================================================================================================
 //Setup the layers in the Window
 static void window_load(Window *window) {
@@ -290,8 +311,8 @@ static void window_load(Window *window) {
         .get_header_height = NULL,
         .get_num_rows = menu_get_number_of_rows,
         .get_num_sections = menu_get_number_of_sections,
-        .select_click = menu_select_grocery_item,
-        .select_long_click = menu_select_grocery_item,
+        .select_click = NULL,
+        .select_long_click = NULL,
         .selection_changed = NULL
         });
 
@@ -319,8 +340,8 @@ static void init(void) {
         });
 
     //Setup Bitmaps
-    checked_bitmap = gbitmap_create_with_resource(RESOURCE_ID_CHECKED_BOX_ICON);
-    unchecked_bitmap = gbitmap_create_with_resource(RESOURCE_ID_UNCHECKED_BOX_ICON);
+    //checked_bitmap = gbitmap_create_with_resource(RESOURCE_ID_CHECKED_BOX_ICON);
+    //unchecked_bitmap = gbitmap_create_with_resource(RESOURCE_ID_UNCHECKED_BOX_ICON);
 
     //Register AppMessage Callbacks
     app_message_register_inbox_received(in_received_handler);
@@ -330,8 +351,8 @@ static void init(void) {
 
     app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
 
-    //Request the grocery list
-    send_request_message();
+    //Request the tweet list
+    //send_request_message();
 
     // Push the window
     window_stack_push(window, true);
