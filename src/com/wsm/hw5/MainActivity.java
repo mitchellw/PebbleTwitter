@@ -20,6 +20,7 @@ import android.hardware.Camera;
 import android.hardware.Camera.PictureCallback;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.text.Editable;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -202,6 +203,19 @@ public class MainActivity extends Activity {
 		});
 	}
 
+	private String getSearchText() {
+		if (mSearchEditText == null) {
+			return null;
+		}
+
+		Editable editable = mSearchEditText.getEditableText();
+		if (editable == null) {
+			return null;
+		}
+
+		return editable.toString();
+	}
+
 	private void sendTweetsToPebble() {
 		//Add all items from the list to a PebbleDictionary
 		PebbleDictionary tweetListDict = new PebbleDictionary();
@@ -230,20 +244,16 @@ public class MainActivity extends Activity {
 		Log.i(TAG, "Grocery list to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
 	}
 
-	private class TwitterTask extends AsyncTask<Void, Void, List<ITweet>> {
+	private class TwitterTask extends AsyncTask<String, Void, List<ITweet>> {
 
 		@Override
-		protected List<ITweet> doInBackground(Void... arg0) {
-			Query query = null;
-			if (lastResult == null) {
-				query = new Query(QUERY);
+		protected List<ITweet> doInBackground(String... args) {
+			if (args.length != 1) {
+				return null;
 			}
-			else {
-				if (!lastResult.hasNext()) {
-					return null;
-				}
-				query = lastResult.nextQuery();
-			}
+			String searchTerm = args[0];
+
+			Query query = new Query(searchTerm);
 
 			List<IPhotoStreamItem> photoStream = new ArrayList<IPhotoStreamItem>();
 			try {
