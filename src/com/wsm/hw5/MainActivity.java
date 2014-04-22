@@ -4,23 +4,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import twitter4j.Query;
-import twitter4j.QueryResult;
-import twitter4j.Twitter;
-import twitter4j.TwitterException;
-import twitter4j.TwitterFactory;
+import twitter4j.FilterQuery;
+import twitter4j.StallWarning;
+import twitter4j.Status;
+import twitter4j.StatusDeletionNotice;
+import twitter4j.StatusListener;
+import twitter4j.TwitterStream;
+import twitter4j.TwitterStreamFactory;
 import twitter4j.conf.ConfigurationBuilder;
-
-import com.getpebble.android.kit.PebbleKit;
-import com.getpebble.android.kit.PebbleKit.PebbleAckReceiver;
-import com.getpebble.android.kit.PebbleKit.PebbleNackReceiver;
-import com.getpebble.android.kit.util.PebbleDictionary;
-
 import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.Editable;
 import android.util.Log;
@@ -30,6 +25,11 @@ import android.view.ViewGroup.LayoutParams;
 import android.widget.EditText;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
+
+import com.getpebble.android.kit.PebbleKit;
+import com.getpebble.android.kit.PebbleKit.PebbleAckReceiver;
+import com.getpebble.android.kit.PebbleKit.PebbleNackReceiver;
+import com.getpebble.android.kit.util.PebbleDictionary;
 
 public class MainActivity extends Activity {
 	//~PEBBLE Transaction Ids--------------------------------------------------------------------------------------------------------
@@ -47,7 +47,7 @@ public class MainActivity extends Activity {
 	/**
 	 * Key used to store the size of the tweets list
 	 */
-	private static final int LIST_SIZE_KEY = 37;
+	private static final int TWEET_KEY = 37;
 
 
 	//~Constants---------------------------------------------------------------------------------------------------------------------
@@ -62,9 +62,8 @@ public class MainActivity extends Activity {
 
 	//~Variables--------------------------------------------------------------------------------------------------------------------
 	private EditText mSearchEditText;
-
-	private List<ITweet> tweetList;
-	private Twitter twitter;
+	private List<String> trackers;
+	private FilterQuery query;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -83,10 +82,34 @@ public class MainActivity extends Activity {
 		mLayout.addView(mSearchEditText);
 
 		ConfigurationBuilder cb = new ConfigurationBuilder();
-		TwitterFactory tf = new TwitterFactory(cb.build());
-		twitter = tf.getInstance();
+		TwitterStreamFactory tf = new TwitterStreamFactory(cb.build());
+		TwitterStream twitterStream = tf.getInstance();
 
-		tweetList = new ArrayList<ITweet>();
+		trackers = new ArrayList<String>();
+		query = new FilterQuery();
+		query.track((String[]) trackers.toArray());
+		twitterStream.addListener(new StatusListener() {
+			@Override
+			public void onException(Exception arg0) {}
+
+			@Override
+			public void onTrackLimitationNotice(int arg0) {}
+
+			@Override
+			public void onStallWarning(StallWarning arg0) {}
+
+			@Override
+			public void onScrubGeo(long arg0, long arg1) {}
+
+			@Override
+			public void onDeletionNotice(StatusDeletionNotice arg0) {}
+
+			@Override
+			public void onStatus(Status status) {
+				sendTweetToPebble(new Tweet(status));
+			}
+		});
+		twitterStream.filter(query);
 
 		setupPebbleCommunication();
 
@@ -121,13 +144,11 @@ public class MainActivity extends Activity {
 
 		//Check if Pebble is already connected!
 		if (PebbleKit.isWatchConnected(getApplicationContext())) {
-
 			String messageString = "Your Pebble watch is connected!";
 			Toast.makeText(this, messageString, Toast.LENGTH_SHORT).show();
 			Log.i(TAG, messageString);        	
 		}
 		else {
-
 			String messageString = "Your Pebble watch IS NOT connected! FIX THIS!";
 			Toast.makeText(this, messageString, Toast.LENGTH_SHORT).show();
 			Log.i(TAG, messageString);
@@ -150,7 +171,6 @@ public class MainActivity extends Activity {
 
 			@Override
 			public void onReceive(Context context, Intent intent) {
-
 				String messageString = "You just disconnected your Pebble Watch! Why you disconnect!??";				
 				Toast.makeText(context, messageString, Toast.LENGTH_SHORT).show();
 				Log.i(TAG, messageString);
@@ -162,7 +182,6 @@ public class MainActivity extends Activity {
 
 			@Override
 			public void receiveAck(Context context, int transactionId) {
-
 				String messageString = "RECEIVED AN ACK FOR transactionId: " + transactionId;
 				Toast.makeText(context, messageString, Toast.LENGTH_SHORT).show();
 				Log.i(TAG, messageString);
@@ -174,7 +193,6 @@ public class MainActivity extends Activity {
 
 			@Override
 			public void receiveNack(Context context, int transactionId) {
-
 				String messageString = "RECEIVED A NACK FOR transactionId: " + transactionId;
 				Toast.makeText(context, messageString, Toast.LENGTH_SHORT).show();
 				Log.i(TAG, messageString);
@@ -197,7 +215,14 @@ public class MainActivity extends Activity {
 				switch (myTransactionId) {
 
 				case TWEET_REQUEST:
-					new TwitterTask().execute(getSearchText());
+					String newTracker = getSearchText();
+					if (newTracker != null && newTracker.length() > 0) {
+//						if (newTracker.charAt(0) != '#') {
+//							newTracker = '#' + newTracker;
+//						}
+						trackers.add(newTracker);
+						query.track((String[]) trackers.toArray());
+					}
 					break;
 
 				default:
@@ -213,7 +238,7 @@ public class MainActivity extends Activity {
 			return null;
 		}
 
-		Editable editable = mSearchEditText.getEditableText();
+		Editable editable = mSearchEditText.getText();
 		if (editable == null) {
 			return null;
 		}
@@ -221,61 +246,16 @@ public class MainActivity extends Activity {
 		return editable.toString();
 	}
 
-	private void sendTweetsToPebble() {
+	private void sendTweetToPebble(ITweet tweet) {
 		PebbleDictionary tweetListDict = new PebbleDictionary();
 
-		//Store list size in a PebbleDictionary
-		tweetListDict.addUint32(LIST_SIZE_KEY, tweetList.size());
-		//Add all items from the list to a PebbleDictionary
-		for (int i = 0; i < tweetList.size(); i++) {
-			ITweet tweet = tweetList.get(i);
-			String tweetString = tweet.getUser() + "|" + tweet.getText();
-			byte[] bytes = tweetString.getBytes();
-			tweetListDict.addBytes(i, bytes);
-		}
+		//Add tweet to a PebbleDictionary
+		String tweetString = tweet.getUser() + "|" + tweet.getText();
+		byte[] bytes = tweetString.getBytes();
+		tweetListDict.addBytes(TWEET_KEY, bytes);
 
 		//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
 		PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
-		Log.i(TAG, "Tweet list to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
-	}
-
-	private class TwitterTask extends AsyncTask<String, Void, Void> {
-
-		@Override
-		protected Void doInBackground(String... args) {
-			if (args.length != 1) {
-				return null;
-			}
-			String searchTerm = args[0];
-			Query query = new Query(searchTerm);
-			QueryResult result = null;
-
-			try {
-				result = twitter.search(query);
-			}
-			catch (TwitterException e) {
-				Log.d(TAG, "Problem searching for tweets.");
-				return null;
-			}
-
-			if (result != null) {
-				List<twitter4j.Status> statuses = result.getTweets();
-				if (statuses != null) {
-					tweetList.clear();
-					for (twitter4j.Status status : statuses) {
-						tweetList.add(new Tweet(status));
-					}
-				}
-			}
-
-			return null;
-		}
-
-		@Override
-		protected void onPostExecute(Void result) {
-			super.onPostExecute(result);
-
-			sendTweetsToPebble();
-		}
+		Log.i(TAG, "Tweet to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
 	}
 }
