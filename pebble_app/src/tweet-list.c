@@ -153,8 +153,8 @@ static void send_check_message(int index) {
     DictionaryIterator *iter;
     app_message_outbox_begin(&iter);
     
-    //Set the Transaction_Id to GROCERY_LIST_CHECK_SEND_ID into a Tuplet
-    Tuplet value1 = TupletInteger(TRANSACTION_ID_KEY, GROCERY_LIST_CHECK_SEND_ID);
+    //Set the Transaction_Id to TWEET_SEND_ID into a Tuplet
+    Tuplet value1 = TupletInteger(TRANSACTION_ID_KEY, TWEET_SEND_ID);
     dict_write_tuplet(iter, &value1);
 
     //Sets the index in a tuplet with CHECK_KEY as the key
@@ -240,6 +240,7 @@ static void out_failed_handler(DictionaryIterator *failed, AppMessageResult reas
 
 static void in_dropped_handler(AppMessageResult reason, void *context) {
     // incoming message dropped
+    app_log(4, FILENAME, 161, "Incoming message dropped!\n%d\n",reason);
     //Do nothing here
 }
 
