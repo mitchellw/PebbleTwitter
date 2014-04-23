@@ -45,9 +45,13 @@ public class MainActivity extends Activity {
 	private static final int TWEET_SEND = 95;
 
 	/**
-	 * Key used to store the size of the tweets list
+	 * Key used to store the tweet
 	 */
 	private static final int TWEET_KEY = 37;
+	/**
+	 * Key used to store the author
+	 */
+	private static final int AUTHOR_KEY = 38;
 
 
 	//~Constants---------------------------------------------------------------------------------------------------------------------
@@ -60,10 +64,15 @@ public class MainActivity extends Activity {
 	 */
 	private static final UUID PEBBLE_APP_UUID = UUID.fromString("8e8a4feb-2704-4b72-872b-9cd51dc33d0b");
 
+	private static final int MIN_TIME_TO_UPDATE = 2000;
+
 	//~Variables--------------------------------------------------------------------------------------------------------------------
 	private EditText mSearchEditText;
 	private List<String> trackers;
 	private FilterQuery query;
+	private TwitterStream twitterStream;
+
+	private long lastUpdated;
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -83,11 +92,15 @@ public class MainActivity extends Activity {
 
 		ConfigurationBuilder cb = new ConfigurationBuilder();
 		TwitterStreamFactory tf = new TwitterStreamFactory(cb.build());
-		TwitterStream twitterStream = tf.getInstance();
+		twitterStream = tf.getInstance();
 
 		trackers = new ArrayList<String>();
+		trackers.add("#pebble");
+		trackers.add("#tybg");
+		trackers.add("#ratchet");
+		trackers.add("#earthday");
 		query = new FilterQuery();
-		query.track((String[]) trackers.toArray());
+		query.track(trackers.toArray(new String[]{}));
 		twitterStream.addListener(new StatusListener() {
 			@Override
 			public void onException(Exception arg0) {}
@@ -109,11 +122,23 @@ public class MainActivity extends Activity {
 				sendTweetToPebble(new Tweet(status));
 			}
 		});
-		twitterStream.filter(query);
 
 		setupPebbleCommunication();
 
 		setContentView(mLayout);
+	}
+	
+	@Override
+	protected void onPause() {
+		super.onPause();
+		twitterStream.shutdown();
+		twitterStream.cleanUp();
+	}
+	
+	@Override
+	protected void onResume() {
+		super.onResume();
+		twitterStream.filter(query);
 	}
 
 	@Override
@@ -217,12 +242,13 @@ public class MainActivity extends Activity {
 				case TWEET_REQUEST:
 					String newTracker = getSearchText();
 					if (newTracker != null && newTracker.length() > 0) {
-//						if (newTracker.charAt(0) != '#') {
-//							newTracker = '#' + newTracker;
-//						}
+						//						if (newTracker.charAt(0) != '#') {
+						//							newTracker = '#' + newTracker;
+						//						}
 						trackers.add(newTracker);
-						query.track((String[]) trackers.toArray());
+						query.track(trackers.toArray(new String[]{}));
 					}
+					sendTweetToPebble(null);
 					break;
 
 				default:
@@ -247,15 +273,17 @@ public class MainActivity extends Activity {
 	}
 
 	private void sendTweetToPebble(ITweet tweet) {
-		PebbleDictionary tweetListDict = new PebbleDictionary();
+		if (tweet != null && System.currentTimeMillis() - lastUpdated > MIN_TIME_TO_UPDATE) {
+			PebbleDictionary tweetListDict = new PebbleDictionary();
 
-		//Add tweet to a PebbleDictionary
-		String tweetString = tweet.getUser() + "|" + tweet.getText();
-		byte[] bytes = tweetString.getBytes();
-		tweetListDict.addBytes(TWEET_KEY, bytes);
+			//Add tweet to a PebbleDictionary
+			tweetListDict.addBytes(AUTHOR_KEY, tweet.getUser().getBytes());
+			tweetListDict.addBytes(TWEET_KEY, tweet.getText().getBytes());
 
-		//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
-		PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
-		Log.i(TAG, "Tweet to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
+			//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
+			PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
+			Log.i(TAG, "Tweet to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
+			lastUpdated = System.currentTimeMillis();
+		}
 	}
 }
