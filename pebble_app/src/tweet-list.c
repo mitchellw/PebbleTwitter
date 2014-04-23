@@ -12,7 +12,10 @@ typedef struct tweet_item_t {
 //~CONSTANTS====================================================================================================================================
 static const char *FILENAME = "tweet-list.c";
 
-static const int vert_scroll_text_padding = 4;
+static const int MAX_TWEET_SIZE = 140;
+static const int MIN_CHARS_PER_LINE = 10;
+static const int VERT_SCROLL_TEXT_PADDING = 4;
+static const int TEXT_SIZE = 24;
 
 //The PebbleDictionary key value used to retrieve the identifying transactionId field.
 static const int TRANSACTION_ID_KEY = 79;
@@ -125,9 +128,13 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
 
     Layer* window_layer = window_get_root_layer(window);
     GRect bounds = layer_get_frame(window_layer);
-    GSize max_size = text_layer_get_content_size(tweet_layer);
-    text_layer_set_size(tweet_layer, max_size);
-    scroll_layer_set_content_size(scroll_layer, GSize(bounds.size.w, max_size.h + vert_scroll_text_padding));
+
+    GSize author_size = text_layer_get_content_size(author_layer);
+    text_layer_set_size(author_layer, author_size);
+    GSize tweet_size = text_layer_get_content_size(tweet_layer);
+    text_layer_set_size(tweet_layer, tweet_size);
+
+    scroll_layer_set_content_size(scroll_layer, GSize(bounds.size.w, author_size.h + tweet_size.h + VERT_SCROLL_TEXT_PADDING));
 
     app_log(4, FILENAME, 161, "author: %s, tweet: %s", tweet_item->author, tweet_item->tweet);
 
@@ -156,7 +163,7 @@ static void in_dropped_handler(AppMessageResult reason, void *context) {
 static void window_load(Window *window) {
   Layer* window_layer = window_get_root_layer(window);
   GRect bounds = layer_get_bounds(window_layer);
-  GRect max_text_bounds = GRect(0, 0, bounds.size.w, 24);
+  GRect max_text_bounds = GRect(0, 0, bounds.size.w, TEXT_SIZE);
 
   // Initialize the scroll layer
   scroll_layer = scroll_layer_create(bounds);
@@ -167,14 +174,11 @@ static void window_load(Window *window) {
 
   // Initialize the text layers
   author_layer = text_layer_create(max_text_bounds);
-  tweet_layer = text_layer_create(GRect(0, 24 + vert_scroll_text_padding, bounds.size.w, 2000));
+  tweet_layer = text_layer_create(GRect(0, TEXT_SIZE + VERT_SCROLL_TEXT_PADDING, bounds.size.w, (MAX_TWEET_SIZE/MIN_CHARS_PER_LINE)*TEXT_SIZE));
   text_layer_set_font(tweet_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   text_layer_set_font(author_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
   
   //Motion Sensing
-  //accel_data_service_subscribe(1, accel_handler);
-  //accel_service_set_sampling_rate(ACCEL_SAMPLING_10HZ);
- 
   accel_tap_service_subscribe(tap_handler);
 
   scroll_layer_add_child(scroll_layer, text_layer_get_layer(tweet_layer));
@@ -185,7 +189,6 @@ static void window_load(Window *window) {
 
 //Destroy everything in the Window
 static void window_unload(Window *window) {
-  //accel_data_service_unsubscribe();
   accel_tap_service_unsubscribe();
   text_layer_destroy(tweet_layer);
   text_layer_destroy(author_layer);
@@ -212,9 +215,6 @@ static void init(void) {
   app_message_register_outbox_failed(out_failed_handler);
 
   app_message_open(app_message_inbox_size_maximum(), app_message_outbox_size_maximum());
-
-  //Request the tweet list
-  send_request_message();
 
   // Push the window
   window_stack_push(window, true);

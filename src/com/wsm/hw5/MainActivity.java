@@ -97,9 +97,6 @@ public class MainActivity extends Activity {
 
 		trackers = new ArrayList<String>();
 		trackers.add("#pebble");
-		trackers.add("#tybg");
-		trackers.add("#ratchet");
-		trackers.add("#earthday");
 		query = new FilterQuery();
 		query.track(trackers.toArray(new String[]{}));
 		twitterStream.addListener(new StatusListener() {
@@ -128,14 +125,14 @@ public class MainActivity extends Activity {
 
 		setContentView(mLayout);
 	}
-	
+
 	@Override
 	protected void onPause() {
 		super.onPause();
 		twitterStream.shutdown();
 		twitterStream.cleanUp();
 	}
-	
+
 	@Override
 	protected void onResume() {
 		super.onResume();
@@ -243,11 +240,15 @@ public class MainActivity extends Activity {
 				case TWEET_REQUEST:
 					String newTracker = getSearchText();
 					if (newTracker != null && newTracker.length() > 0) {
-						//						if (newTracker.charAt(0) != '#') {
-						//							newTracker = '#' + newTracker;
-						//						}
+						if (newTracker.charAt(0) != '#') {
+							newTracker = '#' + newTracker;
+						}
 						trackers.add(newTracker);
 						query.track(trackers.toArray(new String[]{}));
+						twitterStream.shutdown();
+						twitterStream.filter(query);
+						Toast.makeText(MainActivity.this, "Added " + newTracker + " to tracking terms.", Toast.LENGTH_SHORT).show();
+						mSearchEditText.setText("");
 					}
 					break;
 
