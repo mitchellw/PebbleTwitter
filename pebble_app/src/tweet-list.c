@@ -90,6 +90,12 @@ static void in_received_handler(DictionaryIterator *received, void *context) {
     //Get tuple for each entry and unpack byte array
     //Allocate memory for new TweetItem
     if (tweet_item != NULL) {
+      if (tweet_item->tweet != NULL) {
+        free(tweet_item->tweet);
+      }
+      if (tweet_item->author != NULL) {
+        free(tweet_item->author);
+      }
       free(tweet_item);
     }
     tweet_item = malloc(sizeof(TweetItem));
@@ -204,6 +210,12 @@ static void deinit(void) {
   //Destroy anything using dynamic memory
   window_destroy(window);
   if (tweet_item != NULL) {
+    if (tweet_item->tweet != NULL) {
+      free(tweet_item->tweet);
+    }
+    if (tweet_item->author != NULL) {
+      free(tweet_item->author);
+    }
     free(tweet_item);
   }
 }

@@ -1,5 +1,6 @@
 package com.wsm.hw5;
 
+import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -248,7 +249,6 @@ public class MainActivity extends Activity {
 						trackers.add(newTracker);
 						query.track(trackers.toArray(new String[]{}));
 					}
-					sendTweetToPebble(null);
 					break;
 
 				default:
@@ -277,8 +277,13 @@ public class MainActivity extends Activity {
 			PebbleDictionary tweetListDict = new PebbleDictionary();
 
 			//Add tweet to a PebbleDictionary
-			tweetListDict.addBytes(AUTHOR_KEY, tweet.getUser().getBytes());
-			tweetListDict.addBytes(TWEET_KEY, tweet.getText().getBytes());
+			try {
+				tweetListDict.addBytes(AUTHOR_KEY, tweet.getUser().getBytes("US-ASCII"));
+				tweetListDict.addBytes(TWEET_KEY, tweet.getText().getBytes("US-ASCII"));
+			} catch (UnsupportedEncodingException e) {
+				Log.e(TAG, "Problem converting to ascii");
+				return;
+			}
 
 			//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
 			PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
