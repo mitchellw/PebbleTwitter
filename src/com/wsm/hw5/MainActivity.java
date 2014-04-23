@@ -67,6 +67,10 @@ public class MainActivity extends Activity {
 
 	private static final int MIN_TIME_TO_UPDATE = 2000;
 
+	private static final int MAX_MESSAGE_SIZE = 124;
+
+	private static final int HEADER_SIZE = 15;
+
 	//~Variables--------------------------------------------------------------------------------------------------------------------
 	private EditText mSearchEditText;
 	private List<String> trackers;
@@ -277,19 +281,29 @@ public class MainActivity extends Activity {
 		if (tweet != null && System.currentTimeMillis() - lastUpdated > MIN_TIME_TO_UPDATE) {
 			PebbleDictionary tweetListDict = new PebbleDictionary();
 
+			int userByteSize = 0;
+			int tweetByteSize = 0;
+
 			//Add tweet to a PebbleDictionary
 			try {
-				tweetListDict.addBytes(AUTHOR_KEY, tweet.getUser().getBytes("US-ASCII"));
-				tweetListDict.addBytes(TWEET_KEY, tweet.getText().getBytes("US-ASCII"));
+				byte[] userBytes = tweet.getUser().getBytes("US-ASCII");
+				byte[] tweetBytes = tweet.getText().getBytes("US-ASCII");
+				userByteSize = userBytes.length;
+				tweetByteSize = tweetBytes.length;
+				tweetListDict.addBytes(AUTHOR_KEY, userBytes);
+				tweetListDict.addBytes(TWEET_KEY, tweetBytes);
 			} catch (UnsupportedEncodingException e) {
 				Log.e(TAG, "Problem converting to ascii");
 				return;
 			}
-
-			//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
-			PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
-			Log.i(TAG, "Tweet to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
-			lastUpdated = System.currentTimeMillis();
+			
+			// Send and set lastUpdated if small enough tweet to send.
+			if (userByteSize + tweetByteSize < MAX_MESSAGE_SIZE - HEADER_SIZE) {
+				//Send the PebbleDictionary to the Pebble Watch app with PEBBLE_APP_UUID with the appropriate TransactionId
+				PebbleKit.sendDataToPebbleWithTransactionId(this, PEBBLE_APP_UUID, tweetListDict, TWEET_SEND);
+				Log.i(TAG, "Tweet to Pebble.......SENT!!!!!!!!!!!!!!!!!!!!");
+				lastUpdated = System.currentTimeMillis();
+			}
 		}
 	}
 }
