@@ -74,6 +74,14 @@ static void send_request_message() {
   app_message_outbox_send();    
 }
 
+void tap_handler(AccelAxisType axis, int32_t direction)
+{
+  if (axis == ACCEL_AXIS_Z)
+  {
+        send_request_message();
+  }
+}
+
 //~APP MESSAGE CALLBACKS========================================================================================================================
 //Handles Receipt of a message
 static void in_received_handler(DictionaryIterator *received, void *context) {
@@ -156,6 +164,12 @@ static void window_load(Window *window) {
   tweet_layer = text_layer_create(GRect(0, 24 + vert_scroll_text_padding, bounds.size.w, 2000));
   text_layer_set_font(tweet_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24));
   text_layer_set_font(author_layer, fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD));
+  
+  //Motion Sensing
+  //accel_data_service_subscribe(1, accel_handler);
+  //accel_service_set_sampling_rate(ACCEL_SAMPLING_10HZ);
+ 
+  accel_tap_service_subscribe(tap_handler);
 
   scroll_layer_add_child(scroll_layer, text_layer_get_layer(tweet_layer));
   scroll_layer_add_child(scroll_layer, text_layer_get_layer(author_layer));
@@ -165,6 +179,8 @@ static void window_load(Window *window) {
 
 //Destroy everything in the Window
 static void window_unload(Window *window) {
+  //accel_data_service_unsubscribe();
+  accel_tap_service_unsubscribe();
   text_layer_destroy(tweet_layer);
   text_layer_destroy(author_layer);
   scroll_layer_destroy(scroll_layer);
